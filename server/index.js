@@ -1,84 +1,74 @@
+require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
-const jwt = require('jsonwebtoken')
-const bcrypt = require('bcryptjs')
-const { WebSocketServer } = require('ws')
 const http = require('http')
+const { WebSocketServer } = require('ws')
+const { startAutomationEngine } = require('./services/automation')
 
-const app = express()
+const app    = express()
 const server = http.createServer(app)
-const wss = new WebSocketServer({ server, path: '/ws' })
+const wss    = new WebSocketServer({ server, path: '/ws' })
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }))
+// ─── Middleware ────────────────────────────────────────────────────────────────
+app.use(cors({ origin: process.env.CLIENT_ORIGIN || 'http://localhost:5173', credentials: true }))
 app.use(express.json())
 
-const JWT_SECRET = process.env.JWT_SECRET || 'farmiq-dev-secret-2026'
-
-const USERS = [
-  { id: 1, name: 'Ahmad Hassan', email: 'admin@farm.com', passwordHash: bcrypt.hashSync('admin123', 10), role: 'Super Admin' },
-  { id: 2, name: 'Sara Al-Rashid', email: 'owner@farm.com', passwordHash: bcrypt.hashSync('owner123', 10), role: 'Farm Owner' },
-  { id: 3, name: 'Omar Khalid', email: 'manager@farm.com', passwordHash: bcrypt.hashSync('manager123', 10), role: 'Farm Manager' },
-  { id: 4, name: 'Laila Nasser', email: 'worker@farm.com', passwordHash: bcrypt.hashSync('worker123', 10), role: 'Worker' },
-]
-
-let sensorState = {
-  1: { temp: 21.2, humidity: 89.5, co2: 820, light: 450, moisture: 72 },
-  2: { temp: 22.8, humidity: 78.3, co2: 1150, light: 380, moisture: 65 },
-  3: { temp: 26.4, humidity: 82.1, co2: 1680, light: 510, moisture: 58 },
+// ─── WebSocket ────────────────────────────────────────────────────────────────
+function broadcast(payload) {
+  const msg = JSON.stringify(payload)
+  wss.clients.forEach(ws => { if (ws.readyState === 1) ws.send(msg) })
 }
 
-function simulateSensors() {
-  for (const id in sensorState) {
-    const s = sensorState[id]
-    sensorState[id] = {
-      temp: parseFloat((s.temp + (Math.random() - 0.5) * 0.4).toFixed(1)),
-      humidity: parseFloat((s.humidity + (Math.random() - 0.5) * 1.2).toFixed(1)),
-      co2: Math.round(s.co2 + (Math.random() - 0.5) * 30),
-      light: Math.round(s.light + (Math.random() - 0.5) * 20),
-      moisture: parseFloat((s.moisture + (Math.random() - 0.5) * 0.5).toFixed(1)),
-    }
-  }
-  return sensorState
-}
+app.locals.broadcast = broadcast
 
-setInterval(() => {
-  const data = simulateSensors()
-  const msg = JSON.stringify({ type: 'sensor_update', data, timestamp: new Date().toISOString() })
-  wss.clients.forEach(client => {
-    if (client.readyState === 1) client.send(msg)
+wss.on('connection', (ws, req) => {
+  console.log(`WS client connected (${wss.clients.size} total)`)
+  ws.send(JSON.stringify({ type: 'connected', message: 'JyväSisu Fungi WebSocket ready' }))
+
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw)
+      // Client can send { type: 'ping' }
+      if (msg.type === 'ping') ws.send(JSON.stringify({ type: 'pong' }))
+    } catch {}
   })
-}, 3000)
 
-wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'connected', message: 'FarmIQ WebSocket connected' }))
-  ws.send(JSON.stringify({ type: 'sensor_update', data: sensorState, timestamp: new Date().toISOString() }))
+  ws.on('close', () => console.log(`WS client disconnected (${wss.clients.size} remaining)`))
 })
 
-app.post('/api/auth/login', (req, res) => {
-  const { email, password } = req.body
-  const user = USERS.find(u => u.email === email)
-  if (!user || !bcrypt.compareSync(password, user.passwordHash)) {
-    return res.status(401).json({ error: 'Invalid credentials' })
-  }
-  const { passwordHash: _, ...safe } = user
-  const token = jwt.sign(safe, JWT_SECRET, { expiresIn: '7d' })
-  res.json({ token, user: safe })
-})
+// ─── Routes ───────────────────────────────────────────────────────────────────
+app.use('/api/auth',        require('./routes/auth'))
+app.use('/api/users',       require('./routes/users'))
+app.use('/api/farms',       require('./routes/farms'))
+app.use('/api/rooms',       require('./routes/rooms'))
+app.use('/api/devices',     require('./routes/devices'))
+app.use('/api/sensor-data', require('./routes/sensors'))
+app.use('/api/automation',  require('./routes/automation'))
+app.use('/api/alerts',      require('./routes/alerts'))
+app.use('/api/tasks',       require('./routes/tasks'))
+app.use('/api/harvest',     require('./routes/harvest'))
+app.use('/api/inventory',   require('./routes/inventory'))
 
-app.get('/api/sensors', (req, res) => {
-  res.json(sensorState)
-})
-
+// ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() })
+  res.json({ status: 'ok', uptime: Math.round(process.uptime()), timestamp: new Date().toISOString() })
 })
 
+// 404
+app.use((req, res) => res.status(404).json({ error: `Route ${req.method} ${req.path} not found` }))
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error(err.stack)
+  res.status(500).json({ error: err.message })
+})
+
+// ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001
 server.listen(PORT, () => {
-  console.log(`\n🍄 FarmIQ Backend running on http://localhost:${PORT}`)
-  console.log(`📡 WebSocket available at ws://localhost:${PORT}/ws`)
-  console.log(`\nDemo credentials:`)
-  console.log(`  Super Admin: admin@farm.com / admin123`)
-  console.log(`  Farm Manager: manager@farm.com / manager123`)
-  console.log(`  Worker: worker@farm.com / worker123\n`)
+  console.log(`\n🍄 JyväSisu Fungi Backend`)
+  console.log(`   API  → http://localhost:${PORT}/api`)
+  console.log(`   WS   → ws://localhost:${PORT}/ws`)
+  console.log(`   Health → http://localhost:${PORT}/api/health\n`)
+  startAutomationEngine(broadcast)
 })
