@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { @apply border-slate-700; }
+  body { @apply antialiased; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-slate-900; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-500; }
+}
+
+@layer components {
+  .card { @apply bg-slate-800 border border-slate-700 rounded-xl p-4; }
+  .card-sm { @apply bg-slate-800 border border-slate-700 rounded-lg p-3; }
+  .btn-primary { @apply bg-farm-600 hover:bg-farm-500 text-white px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-secondary { @apply bg-slate-700 hover:bg-slate-600 text-slate-200 px-4 py-2 rounded-lg font-medium transition-colors; }
+  .btn-danger { @apply bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-medium transition-colors; }
+  .btn-ghost { @apply hover:bg-slate-700 text-slate-400 hover:text-slate-200 px-3 py-2 rounded-lg transition-colors; }
+  .input { @apply bg-slate-700 border border-slate-600 text-slate-100 placeholder-slate-400 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-farm-500 focus:border-transparent; }
+  .select { @apply bg-slate-700 border border-slate-600 text-slate-100 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-farm-500; }
+  .label { @apply text-sm font-medium text-slate-300 mb-1 block; }
+  .status-optimal { @apply text-farm-400; }
+  .status-warning { @apply text-amber-400; }
+  .status-critical { @apply text-red-400; }
+  .badge-optimal { @apply bg-farm-900/50 text-farm-400 border border-farm-700; }
+  .badge-warning { @apply bg-amber-900/50 text-amber-400 border border-amber-700; }
+  .badge-critical { @apply bg-red-900/50 text-red-400 border border-red-700; }
+  .badge-info { @apply bg-blue-900/50 text-blue-400 border border-blue-700; }
+  .badge-neutral { @apply bg-slate-700 text-slate-300 border border-slate-600; }
+}
