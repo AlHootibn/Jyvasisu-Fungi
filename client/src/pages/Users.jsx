@@ -2,7 +2,7 @@ import { useState } from 'react'
 import Layout from '../components/Layout/Layout'
 import { useFarm } from '../contexts/FarmContext'
 import { useAuth } from '../contexts/AuthContext'
-import { Users as UsersIcon, Shield, Pencil, Trash2, X, Check, AlertTriangle } from 'lucide-react'
+import { Users as UsersIcon, Shield, Pencil, Trash2, X, Check, AlertTriangle, UserPlus } from 'lucide-react'
 import clsx from 'clsx'
 import { format } from 'date-fns'
 
@@ -24,15 +24,22 @@ const ROLE_PERMS = {
   'Viewer':      ['Read-only dashboard', 'View reports'],
 }
 
+const EMPTY_USER = { name: '', email: '', password: '', role: 'Worker' }
+
 export default function Users() {
-  const { users, updateUser, deleteUser } = useFarm()
+  const { users, addUser, updateUser, deleteUser } = useFarm()
   const { user: currentUser, canAccess } = useAuth()
 
-  const [editId, setEditId]             = useState(null)
-  const [editForm, setEditForm]         = useState({})
-  const [editConfirm, setEditConfirm]   = useState(false)
+  const [showAddForm, setShowAddForm]     = useState(false)
+  const [addForm, setAddForm]             = useState(EMPTY_USER)
+  const [addError, setAddError]           = useState('')
+  const [addLoading, setAddLoading]       = useState(false)
 
-  const [deleteId, setDeleteId]         = useState(null)
+  const [editId, setEditId]               = useState(null)
+  const [editForm, setEditForm]           = useState({})
+  const [editConfirm, setEditConfirm]     = useState(false)
+
+  const [deleteId, setDeleteId]           = useState(null)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   if (!canAccess('Farm Owner')) {
@@ -48,31 +55,47 @@ export default function Users() {
 
   const isSuperAdmin = (u) => u.role === 'Super Admin'
 
+  // ── Add user ─────────────────────────────────────────────────────────────
+  const handleAddUser = async () => {
+    if (!addForm.name || !addForm.email || !addForm.password) {
+      setAddError('Name, email and password are required.')
+      return
+    }
+    setAddLoading(true)
+    setAddError('')
+    const result = await addUser(addForm)
+    setAddLoading(false)
+    if (result.success) {
+      setAddForm(EMPTY_USER)
+      setShowAddForm(false)
+    } else {
+      setAddError(result.error || 'Failed to create user.')
+    }
+  }
+
+  // ── Edit user ─────────────────────────────────────────────────────────────
   const startEdit = (u) => {
     setEditId(u.id)
-    setEditForm({ name: u.name, email: u.email, role: u.role, avatar: u.avatar })
+    setEditForm({ name: u.name, email: u.email, role: u.role })
     setEditConfirm(false)
     setDeleteId(null)
+    setShowAddForm(false)
   }
 
-  const cancelEdit = () => {
-    setEditId(null)
-    setEditConfirm(false)
-  }
+  const cancelEdit = () => { setEditId(null); setEditConfirm(false) }
 
   const confirmEdit = () => {
-    updateUser(editId, {
-      ...editForm,
-      avatar: editForm.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2),
-    })
+    updateUser(editId, editForm)
     setEditId(null)
     setEditConfirm(false)
   }
 
+  // ── Delete user ───────────────────────────────────────────────────────────
   const startDelete = (u) => {
     setDeleteId(u.id)
     setDeleteConfirm(false)
     setEditId(null)
+    setShowAddForm(false)
   }
 
   const confirmDelete = () => {
@@ -81,8 +104,8 @@ export default function Users() {
     setDeleteConfirm(false)
   }
 
-  const targetUser    = users.find(u => u.id === deleteId)
-  const editingUser   = users.find(u => u.id === editId)
+  const targetUser  = users.find(u => u.id === deleteId)
+  const editingUser = users.find(u => u.id === editId)
 
   return (
     <Layout title="User Management">
@@ -99,12 +122,115 @@ export default function Users() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 card">
-            <h2 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-              <UsersIcon size={16} /> All Users
-            </h2>
+          <div className="lg:col-span-2 space-y-3">
 
-            <div className="space-y-2">
+            {/* Header + Add button */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                <UsersIcon size={16} /> All Users ({users.length})
+              </h2>
+              {canAccess('Super Admin') && (
+                <button
+                  onClick={() => { setShowAddForm(p => !p); setAddError(''); setAddForm(EMPTY_USER); setEditId(null); setDeleteId(null) }}
+                  className="btn-primary flex items-center gap-2 text-sm"
+                >
+                  <UserPlus size={15} />
+                  {showAddForm ? 'Cancel' : 'Add User'}
+                </button>
+              )}
+            </div>
+
+            {/* Add user form */}
+            {showAddForm && (
+              <div className="card border-farm-800 space-y-4">
+                <h3 className="text-sm font-semibold text-farm-400 flex items-center gap-2">
+                  <UserPlus size={15} /> New User Account
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="label">Full Name</label>
+                    <input
+                      className="input"
+                      placeholder="e.g. Mikael Virtanen"
+                      value={addForm.name}
+                      onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Email Address</label>
+                    <input
+                      type="email"
+                      className="input"
+                      placeholder="mikael@farm.com"
+                      value={addForm.email}
+                      onChange={e => setAddForm(p => ({ ...p, email: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Password</label>
+                    <input
+                      type="password"
+                      className="input"
+                      placeholder="Min. 6 characters"
+                      value={addForm.password}
+                      onChange={e => setAddForm(p => ({ ...p, password: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="label">Role & Permissions</label>
+                    <select
+                      className="select"
+                      value={addForm.role}
+                      onChange={e => setAddForm(p => ({ ...p, role: e.target.value }))}
+                    >
+                      {ROLES.filter(r => r !== 'Super Admin').map(r => (
+                        <option key={r} value={r}>{r}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Permission preview for selected role */}
+                <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+                  <p className="text-[11px] text-slate-400 font-medium mb-1.5">
+                    <span className={clsx('px-1.5 py-0.5 rounded border text-[10px] mr-1.5', ROLE_STYLES[addForm.role])}>{addForm.role}</span>
+                    will be able to:
+                  </p>
+                  <ul className="space-y-0.5">
+                    {ROLE_PERMS[addForm.role]?.map(p => (
+                      <li key={p} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                        <span className="w-1 h-1 rounded-full bg-farm-600 shrink-0" /> {p}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {addError && (
+                  <div className="bg-red-900/30 border border-red-800 text-red-300 text-sm px-3 py-2 rounded-lg">
+                    {addError}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    onClick={handleAddUser}
+                    disabled={addLoading}
+                    className="btn-primary text-sm flex items-center gap-1.5"
+                  >
+                    {addLoading
+                      ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      : <Check size={14} />}
+                    Create User
+                  </button>
+                  <button onClick={() => setShowAddForm(false)} className="btn-secondary text-sm flex items-center gap-1.5">
+                    <X size={14} /> Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* User list */}
+            <div className="card space-y-2">
               {users.map(u => (
                 <div
                   key={u.id}
@@ -116,7 +242,7 @@ export default function Users() {
                   )}
                 >
                   {/* Normal row */}
-                  {editId !== u.id && (
+                  {editId !== u.id && deleteId !== u.id && (
                     <div className="flex items-center gap-3 p-3 group">
                       <div className="w-10 h-10 rounded-xl bg-slate-700 flex items-center justify-center text-sm font-bold text-slate-300 shrink-0">
                         {u.avatar}
@@ -137,10 +263,11 @@ export default function Users() {
                       </div>
                       <div className="text-right space-y-1 mr-1">
                         <span className={clsx('text-[10px] px-2 py-0.5 rounded border inline-block', ROLE_STYLES[u.role])}>{u.role}</span>
-                        <p className="text-[10px] text-slate-600">Last: {format(new Date(u.lastLogin), 'MMM d, HH:mm')}</p>
+                        <p className="text-[10px] text-slate-600">
+                          Joined: {u.created_at ? format(new Date(u.created_at), 'MMM d, yyyy') : '—'}
+                        </p>
                       </div>
 
-                      {/* Action buttons — only for non-Super Admin, non-self */}
                       {canAccess('Super Admin') && !isSuperAdmin(u) && u.id !== currentUser?.id && (
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                           <button
@@ -178,7 +305,7 @@ export default function Users() {
                           <input type="email" className="input" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} />
                         </div>
                         <div>
-                          <label className="label">Role</label>
+                          <label className="label">Role & Permissions</label>
                           <select
                             className="select"
                             value={editForm.role}
@@ -189,6 +316,21 @@ export default function Users() {
                             ))}
                           </select>
                         </div>
+                      </div>
+
+                      {/* Permission preview */}
+                      <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+                        <p className="text-[11px] text-slate-400 mb-1">
+                          <span className={clsx('px-1.5 py-0.5 rounded border text-[10px] mr-1.5', ROLE_STYLES[editForm.role])}>{editForm.role}</span>
+                          permissions:
+                        </p>
+                        <ul className="space-y-0.5">
+                          {ROLE_PERMS[editForm.role]?.map(p => (
+                            <li key={p} className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                              <span className="w-1 h-1 rounded-full bg-farm-600 shrink-0" /> {p}
+                            </li>
+                          ))}
+                        </ul>
                       </div>
 
                       {!editConfirm ? (
@@ -241,9 +383,7 @@ export default function Users() {
                         </div>
                       ) : (
                         <div className="bg-red-900/30 border border-red-700 rounded-lg p-3 flex flex-col sm:flex-row items-start sm:items-center gap-3">
-                          <p className="text-sm text-red-300 flex-1">
-                            Are you absolutely sure? This cannot be undone.
-                          </p>
+                          <p className="text-sm text-red-300 flex-1">Are you absolutely sure? This cannot be undone.</p>
                           <div className="flex gap-2">
                             <button onClick={confirmDelete} className="btn-danger text-xs px-3 py-1.5 flex items-center gap-1">
                               <Check size={13} /> Confirm delete

@@ -27,11 +27,25 @@ const EMPTY_ROOM = {
   expectedHarvest: '',
 }
 
+const SENSOR_KEYS = ['temp', 'humidity', 'co2', 'light', 'moisture']
+
 export default function FarmOverview() {
-  const { farms, rooms, sensors, updateRoom, addRoom, deleteRoom } = useFarm()
+  const { farms, rooms, sensors, alerts, updateRoom, addRoom, deleteRoom } = useFarm()
   const { canAccess } = useAuth()
   const navigate = useNavigate()
   const farm = farms[0]
+
+  if (!farm) {
+    return (
+      <Layout title="Farm Overview">
+        <div className="flex items-center justify-center py-20">
+          <div className="w-6 h-6 border-2 border-farm-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </Layout>
+    )
+  }
+
+  const activeAlertCount = alerts.filter(a => !a.acknowledged).length
 
   const [showAddForm, setShowAddForm]     = useState(false)
   const [addForm, setAddForm]             = useState(EMPTY_ROOM)
@@ -108,7 +122,7 @@ export default function FarmOverview() {
               <p className="text-[11px] text-slate-500">Grow Rooms</p>
             </div>
             <div className="card-sm text-center">
-              <p className={clsx('text-2xl font-bold', farm.activeAlerts > 0 ? 'text-red-400' : 'text-farm-400')}>{farm.activeAlerts}</p>
+              <p className={clsx('text-2xl font-bold', activeAlertCount > 0 ? 'text-red-400' : 'text-farm-400')}>{activeAlertCount}</p>
               <p className="text-[11px] text-slate-500">Active Alerts</p>
             </div>
             <div className="card-sm text-center col-span-2">
@@ -289,8 +303,8 @@ export default function FarmOverview() {
                 {/* Sensor readings */}
                 {!isEditing && !isDeleting && s && (
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(s).map(([type, value]) => (
-                      <SensorCard key={type} type={type} value={value} compact />
+                    {SENSOR_KEYS.map(type => (
+                      <SensorCard key={type} type={type} value={s[type]} compact />
                     ))}
                   </div>
                 )}

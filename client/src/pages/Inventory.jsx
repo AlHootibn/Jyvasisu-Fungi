@@ -48,7 +48,7 @@ export default function Inventory() {
 
   const handleSaveNew = () => {
     if (!form.name) return
-    addInventoryItem({ ...form, lastRestocked: new Date().toISOString() })
+    addInventoryItem(form)
     setForm(EMPTY)
     setShowForm(false)
   }
@@ -139,7 +139,7 @@ export default function Inventory() {
                     <td className="py-3 pr-4 text-slate-500 text-xs">{item.minQuantity} {item.unit}</td>
                     <td className="py-3 pr-4 text-slate-400 text-xs">${item.cost}</td>
                     <td className="py-3 pr-4 text-slate-400 text-xs">{item.supplier}</td>
-                    <td className="py-3 pr-4 text-slate-500 text-xs">{format(new Date(item.lastRestocked), 'MMM d, yyyy')}</td>
+                    <td className="py-3 pr-4 text-slate-500 text-xs">{item.lastRestocked ? format(new Date(item.lastRestocked), 'MMM d, yyyy') : '—'}</td>
                     <td className="py-3 pr-4">
                       <span className={clsx('text-[10px] px-2 py-0.5 rounded border', status === 'critical' ? 'badge-critical' : status === 'warning' ? 'badge-warning' : 'badge-optimal')}>
                         {status === 'critical' ? 'Critical' : status === 'warning' ? 'Low Stock' : 'In Stock'}
@@ -151,7 +151,7 @@ export default function Inventory() {
                           restockId === item.id ? (
                             <div className="flex items-center gap-1">
                               <input type="number" className="input w-16 text-xs py-1 px-2" value={restockQty} onChange={e => setRestockQty(Number(e.target.value))} />
-                              <button onClick={() => { updateInventory(item.id, { quantity: item.quantity + restockQty, lastRestocked: new Date().toISOString() }); setRestockId(null); setRestockQty(0) }} className="btn-primary text-xs py-1 px-2">OK</button>
+                              <button onClick={() => { updateInventory(item.id, { quantity: item.quantity + restockQty }); setRestockId(null); setRestockQty(0) }} className="btn-primary text-xs py-1 px-2">OK</button>
                               <button onClick={() => setRestockId(null)} className="btn-ghost text-xs py-1 px-2">✕</button>
                             </div>
                           ) : (
@@ -203,7 +203,7 @@ function EditRow({ item, onSave, onCancel }) {
       <td className="py-2 pr-2"><input type="number" className="input text-xs py-1.5 w-20" value={form.minQuantity} onChange={f('minQuantity')} /></td>
       <td className="py-2 pr-2"><input type="number" step="0.01" className="input text-xs py-1.5 w-20" value={form.cost} onChange={f('cost')} /></td>
       <td className="py-2 pr-2"><input className="input text-xs py-1.5" value={form.supplier} onChange={f('supplier')} /></td>
-      <td className="py-2 pr-2 text-slate-500 text-xs">{format(new Date(item.lastRestocked), 'MMM d, yyyy')}</td>
+      <td className="py-2 pr-2 text-slate-500 text-xs">{item.lastRestocked ? format(new Date(item.lastRestocked), 'MMM d, yyyy') : '—'}</td>
       <td className="py-2 pr-2">
         <span className="text-[10px] px-2 py-0.5 rounded border badge-info">editing</span>
       </td>

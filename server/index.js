@@ -4,6 +4,7 @@ const cors = require('cors')
 const http = require('http')
 const { WebSocketServer } = require('ws')
 const { startAutomationEngine } = require('./services/automation')
+const { startSensorSimulator } = require('./services/sensorSimulator')
 
 const app    = express()
 const server = http.createServer(app)
@@ -71,4 +72,5 @@ server.listen(PORT, () => {
   console.log(`   WS   → ws://localhost:${PORT}/ws`)
   console.log(`   Health → http://localhost:${PORT}/api/health\n`)
   startAutomationEngine(broadcast)
+  startSensorSimulator(broadcast)
 })

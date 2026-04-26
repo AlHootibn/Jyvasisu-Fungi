@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from 'react'
-import { DEMO_USERS } from '../data/mockData'
+import { api } from '../services/api'
 
 const AuthContext = createContext(null)
 
@@ -9,17 +9,22 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const saved = localStorage.getItem('farmiq_user')
-    if (saved) setUser(JSON.parse(saved))
+    if (saved) {
+      try { setUser(JSON.parse(saved)) } catch {}
+    }
     setLoading(false)
   }, [])
 
-  function login(email, password) {
-    const found = DEMO_USERS.find(u => u.email === email && u.password === password)
-    if (!found) return { success: false, error: 'Invalid email or password' }
-    const { password: _, ...safe } = found
-    setUser(safe)
-    localStorage.setItem('farmiq_user', JSON.stringify(safe))
-    return { success: true }
+  async function login(email, password) {
+    try {
+      const result = await api.login(email, password)
+      const userData = { ...result.user, token: result.token }
+      setUser(userData)
+      localStorage.setItem('farmiq_user', JSON.stringify(userData))
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message || 'Invalid email or password' }
+    }
   }
 
   function logout() {
