@@ -3,7 +3,7 @@ import Layout from '../components/Layout/Layout'
 import { useFarm } from '../contexts/FarmContext'
 import { useAuth } from '../contexts/AuthContext'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import { Leaf, Plus } from 'lucide-react'
+import { Leaf, Plus, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { format, subDays } from 'date-fns'
 
@@ -18,10 +18,11 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Production() {
-  const { harvestLogs, addHarvestLog, rooms } = useFarm()
+  const { harvestLogs, addHarvestLog, deleteHarvestLog, rooms } = useFarm()
   const { canAccess } = useAuth()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ roomId: 1, date: format(new Date(), 'yyyy-MM-dd'), weight: '', quality: 'A', species: 'Oyster', notes: '' })
+  const [deleteId, setDeleteId] = useState(null)
 
   const totalWeight = harvestLogs.reduce((s, h) => s + h.weight, 0)
   const gradeA = harvestLogs.filter(h => h.quality === 'A').length
@@ -133,7 +134,7 @@ export default function Production() {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {[...harvestLogs].reverse().slice(0, 20).map(log => (
-                  <tr key={log.id} className="hover:bg-slate-800/50">
+                  <tr key={log.id} className="hover:bg-slate-800/50 group">
                     <td className="py-2 pr-4 text-slate-400 text-xs">{log.date}</td>
                     <td className="py-2 pr-4 text-slate-300">{log.roomName}</td>
                     <td className="py-2 pr-4 text-slate-400 text-xs">{log.species}</td>
@@ -142,6 +143,20 @@ export default function Production() {
                       <span className={clsx('text-xs px-2 py-0.5 rounded border', log.quality === 'A' ? 'badge-optimal' : log.quality === 'B' ? 'badge-warning' : 'badge-critical')}>{log.quality}</span>
                     </td>
                     <td className="py-2 text-slate-500 text-xs">{log.notes || '—'}</td>
+                    {canAccess('Farm Manager') && (
+                      <td className="py-2 text-right">
+                        {deleteId === log.id ? (
+                          <div className="flex items-center gap-1 justify-end">
+                            <button onClick={() => { deleteHarvestLog(log.id); setDeleteId(null) }} className="text-xs text-red-400 hover:text-red-300 px-2 py-0.5 rounded border border-red-800 hover:bg-red-900/30 transition-colors">Confirm</button>
+                            <button onClick={() => setDeleteId(null)} className="text-xs text-slate-500 hover:text-slate-300 px-2 py-0.5 rounded border border-slate-700 transition-colors">Cancel</button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setDeleteId(log.id)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg">
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

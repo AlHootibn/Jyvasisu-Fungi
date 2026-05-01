@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react'
 import { api, connectWebSocket } from '../services/api'
+import { useToast } from './ToastContext'
 
 const FarmContext = createContext(null)
 
@@ -66,6 +67,8 @@ const normalizeInventory = (i) => ({
 
 // ── Provider ───────────────────────────────────────────────────────────────
 export function FarmProvider({ children }) {
+  const { showToast } = useToast()
+
   const [farms, setFarms] = useState([])
   const [rooms, setRooms] = useState([])
   const [sensors, setSensors] = useState({})
@@ -78,6 +81,7 @@ export function FarmProvider({ children }) {
   const [users, setUsers] = useState([])
   const [lastUpdate, setLastUpdate] = useState(new Date())
   const [loading, setLoading] = useState(true)
+  const [wsConnected, setWsConnected] = useState(false)
   const wsCleanupRef = useRef(null)
 
   // ── Initial data load ────────────────────────────────────────────────────
@@ -112,7 +116,7 @@ export function FarmProvider({ children }) {
         setAutomationRules(rulesData.map(normalizeRule))
         setUsers(usersData)
       } catch (err) {
-        console.error('Failed to load farm data:', err.message)
+        showToast(`Failed to load farm data: ${err.message}`)
       } finally {
         setLoading(false)
       }
@@ -123,18 +127,22 @@ export function FarmProvider({ children }) {
 
   // ── WebSocket for live sensor + device updates ────────────────────────────
   useEffect(() => {
-    const cleanup = connectWebSocket((msg) => {
-      if (msg.type === 'sensor_update') {
-        setSensors(prev => ({ ...prev, [msg.roomId]: msg.data }))
-        setLastUpdate(new Date())
-      } else if (msg.type === 'device_update') {
-        setDevices(prev => prev.map(d =>
-          d.id === msg.deviceId ? { ...d, status: msg.status, mode: msg.mode } : d
-        ))
-      } else if (msg.type === 'new_alert') {
-        setAlerts(prev => [normalizeAlert(msg.alert), ...prev])
-      }
-    })
+    const cleanup = connectWebSocket(
+      (msg) => {
+        if (msg.type === 'sensor_update') {
+          setSensors(prev => ({ ...prev, [msg.roomId]: msg.data }))
+          setLastUpdate(new Date())
+        } else if (msg.type === 'device_update') {
+          setDevices(prev => prev.map(d =>
+            d.id === msg.deviceId ? { ...d, status: msg.status, mode: msg.mode } : d
+          ))
+        } else if (msg.type === 'new_alert') {
+          setAlerts(prev => [normalizeAlert(msg.alert), ...prev])
+        }
+      },
+      () => setWsConnected(true),
+      () => setWsConnected(false),
+    )
     wsCleanupRef.current = cleanup
     return cleanup
   }, [])
@@ -150,7 +158,7 @@ export function FarmProvider({ children }) {
         d.id === deviceId ? { ...d, status: newStatus, mode: 'manual' } : d
       ))
     } catch (err) {
-      console.error('Toggle device failed:', err.message)
+      showToast(err.message)
     }
   }, [devices])
 
@@ -160,7 +168,7 @@ export function FarmProvider({ children }) {
       await api.acknowledgeAlert(alertId)
       setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, acknowledged: true } : a))
     } catch (err) {
-      console.error('Acknowledge alert failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -169,7 +177,7 @@ export function FarmProvider({ children }) {
       await api.acknowledgeAll(1)
       setAlerts(prev => prev.map(a => ({ ...a, acknowledged: true })))
     } catch (err) {
-      console.error('Acknowledge all failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -181,15 +189,15 @@ export function FarmProvider({ children }) {
   const updateTask = useCallback(async (taskId, updates) => {
     try {
       const apiUpdates = {}
-      if (updates.status !== undefined) apiUpdates.status = updates.status
-      if (updates.title !== undefined) apiUpdates.title = updates.title
-      if (updates.priority !== undefined) apiUpdates.priority = updates.priority
+      if (updates.status !== undefined)     apiUpdates.status      = updates.status
+      if (updates.title !== undefined)      apiUpdates.title       = updates.title
+      if (updates.priority !== undefined)   apiUpdates.priority    = updates.priority
       if (updates.assignedTo !== undefined) apiUpdates.assigned_to = updates.assignedTo
-      if (updates.dueDate !== undefined) apiUpdates.due_date = updates.dueDate
+      if (updates.dueDate !== undefined)    apiUpdates.due_date    = updates.dueDate
       await api.updateTask(taskId, apiUpdates)
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t))
     } catch (err) {
-      console.error('Update task failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -206,7 +214,7 @@ export function FarmProvider({ children }) {
       })
       setTasks(prev => [...prev, normalizeTask(result)])
     } catch (err) {
-      console.error('Add task failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -215,7 +223,7 @@ export function FarmProvider({ children }) {
       await api.deleteTask(taskId)
       setTasks(prev => prev.filter(t => t.id !== taskId))
     } catch (err) {
-      console.error('Delete task failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -223,18 +231,18 @@ export function FarmProvider({ children }) {
   const updateInventory = useCallback(async (itemId, updates) => {
     try {
       const apiUpdates = {}
-      if (updates.name !== undefined)        apiUpdates.name        = updates.name
-      if (updates.category !== undefined)    apiUpdates.category    = updates.category
-      if (updates.quantity !== undefined)    apiUpdates.quantity    = updates.quantity
-      if (updates.unit !== undefined)        apiUpdates.unit        = updates.unit
-      if (updates.cost !== undefined)        apiUpdates.cost        = updates.cost
-      if (updates.supplier !== undefined)    apiUpdates.supplier    = updates.supplier
-      if (updates.minQuantity !== undefined) apiUpdates.min_quantity = updates.minQuantity
+      if (updates.name !== undefined)         apiUpdates.name         = updates.name
+      if (updates.category !== undefined)     apiUpdates.category     = updates.category
+      if (updates.quantity !== undefined)     apiUpdates.quantity     = updates.quantity
+      if (updates.unit !== undefined)         apiUpdates.unit         = updates.unit
+      if (updates.cost !== undefined)         apiUpdates.cost         = updates.cost
+      if (updates.supplier !== undefined)     apiUpdates.supplier     = updates.supplier
+      if (updates.minQuantity !== undefined)  apiUpdates.min_quantity = updates.minQuantity
       if (updates.min_quantity !== undefined) apiUpdates.min_quantity = updates.min_quantity
       const result = await api.updateInventory(itemId, apiUpdates)
       setInventory(prev => prev.map(i => i.id === itemId ? normalizeInventory(result) : i))
     } catch (err) {
-      console.error('Update inventory failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -252,7 +260,7 @@ export function FarmProvider({ children }) {
       })
       setInventory(prev => [...prev, normalizeInventory(result)])
     } catch (err) {
-      console.error('Add inventory failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -261,7 +269,7 @@ export function FarmProvider({ children }) {
       await api.deleteInventory(itemId)
       setInventory(prev => prev.filter(i => i.id !== itemId))
     } catch (err) {
-      console.error('Delete inventory failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -278,7 +286,16 @@ export function FarmProvider({ children }) {
       })
       setHarvestLogs(prev => [...prev, normalizeHarvest(result)])
     } catch (err) {
-      console.error('Add harvest failed:', err.message)
+      showToast(err.message)
+    }
+  }, [])
+
+  const deleteHarvestLog = useCallback(async (logId) => {
+    try {
+      await api.deleteHarvest(logId)
+      setHarvestLogs(prev => prev.filter(h => h.id !== logId))
+    } catch (err) {
+      showToast(err.message)
     }
   }, [])
 
@@ -290,7 +307,7 @@ export function FarmProvider({ children }) {
       await api.toggleRule(ruleId, !rule.isActive)
       setAutomationRules(prev => prev.map(r => r.id === ruleId ? { ...r, isActive: !r.isActive } : r))
     } catch (err) {
-      console.error('Toggle rule failed:', err.message)
+      showToast(err.message)
     }
   }, [automationRules])
 
@@ -310,7 +327,7 @@ export function FarmProvider({ children }) {
       })
       setAutomationRules(prev => [...prev, normalizeRule(result)])
     } catch (err) {
-      console.error('Add rule failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -319,7 +336,7 @@ export function FarmProvider({ children }) {
       await api.deleteRule(ruleId)
       setAutomationRules(prev => prev.filter(r => r.id !== ruleId))
     } catch (err) {
-      console.error('Delete rule failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -327,17 +344,17 @@ export function FarmProvider({ children }) {
   const updateRoom = useCallback(async (roomId, updates) => {
     try {
       const apiUpdates = {}
-      if (updates.name !== undefined) apiUpdates.name = updates.name
-      if (updates.type !== undefined) apiUpdates.type = updates.type
-      if (updates.species !== undefined) apiUpdates.species = updates.species
-      if (updates.status !== undefined) apiUpdates.status = updates.status
-      if (updates.currentBatch !== undefined) apiUpdates.current_batch = updates.currentBatch
+      if (updates.name !== undefined)            apiUpdates.name             = updates.name
+      if (updates.type !== undefined)            apiUpdates.type             = updates.type
+      if (updates.species !== undefined)         apiUpdates.species          = updates.species
+      if (updates.status !== undefined)          apiUpdates.status           = updates.status
+      if (updates.currentBatch !== undefined)    apiUpdates.current_batch    = updates.currentBatch
       if (updates.expectedHarvest !== undefined) apiUpdates.expected_harvest = updates.expectedHarvest
-      if (updates.batchStartDate !== undefined) apiUpdates.batch_start_date = updates.batchStartDate
+      if (updates.batchStartDate !== undefined)  apiUpdates.batch_start_date = updates.batchStartDate
       const result = await api.updateRoom(roomId, apiUpdates)
       setRooms(prev => prev.map(r => r.id === roomId ? normalizeRoom(result) : r))
     } catch (err) {
-      console.error('Update room failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -357,7 +374,7 @@ export function FarmProvider({ children }) {
       setRooms(prev => [...prev, normalized])
       setSensors(prev => ({ ...prev, [normalized.id]: { temp: 21.0, humidity: 88.0, co2: 850, light: 400, moisture: 70 } }))
     } catch (err) {
-      console.error('Add room failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -368,7 +385,7 @@ export function FarmProvider({ children }) {
       setSensors(prev => { const n = { ...prev }; delete n[roomId]; return n })
       setDevices(prev => prev.filter(d => d.roomId !== roomId))
     } catch (err) {
-      console.error('Delete room failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -388,7 +405,7 @@ export function FarmProvider({ children }) {
       const result = await api.updateUser(userId, updates)
       setUsers(prev => prev.map(u => u.id === userId ? result : u))
     } catch (err) {
-      console.error('Update user failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -397,7 +414,7 @@ export function FarmProvider({ children }) {
       await api.deleteUser(userId)
       setUsers(prev => prev.filter(u => u.id !== userId))
     } catch (err) {
-      console.error('Delete user failed:', err.message)
+      showToast(err.message)
     }
   }, [])
 
@@ -408,12 +425,13 @@ export function FarmProvider({ children }) {
   return (
     <FarmContext.Provider value={{
       farms, rooms, sensors, devices, alerts, tasks, inventory,
-      harvestLogs, automationRules, users, lastUpdate, loading,
+      harvestLogs, automationRules, users, lastUpdate, loading, wsConnected,
       unacknowledgedCount, criticalCount,
       toggleDevice, acknowledgeAlert, acknowledgeAll, addAlert,
       updateTask, addTask, deleteTask,
       updateInventory, addInventoryItem, deleteInventoryItem,
-      addHarvestLog, toggleAutomationRule, addAutomationRule, deleteAutomationRule,
+      addHarvestLog, deleteHarvestLog,
+      toggleAutomationRule, addAutomationRule, deleteAutomationRule,
       updateRoom, addRoom, deleteRoom, addUser, updateUser, deleteUser,
     }}>
       {children}

@@ -61,13 +61,21 @@ router.get('/latest', auth(), async (req, res) => {
 })
 
 // GET /api/sensor-data/:room_id?hours=24
+// Returns up to ~144 time-bucketed (10-min avg) readings to keep payload small
 router.get('/:room_id', auth(), async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 24
     const { rows } = await db.query(
-      `SELECT temperature AS temp, humidity, co2, light, moisture, created_at
+      `SELECT
+         ROUND(AVG(temperature)::numeric, 1) AS temperature,
+         ROUND(AVG(humidity)::numeric, 1)    AS humidity,
+         ROUND(AVG(co2))::int                AS co2,
+         ROUND(AVG(light))::int              AS light,
+         ROUND(AVG(moisture)::numeric, 1)    AS moisture,
+         to_timestamp(FLOOR(EXTRACT(EPOCH FROM created_at) / 600) * 600) AS created_at
        FROM sensor_data
        WHERE room_id=$1 AND created_at > NOW() - INTERVAL '${hours} hours'
+       GROUP BY FLOOR(EXTRACT(EPOCH FROM created_at) / 600)
        ORDER BY created_at ASC`,
       [req.params.room_id]
     )

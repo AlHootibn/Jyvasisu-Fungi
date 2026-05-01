@@ -32,6 +32,18 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('farmiq_user')
   }
 
+  async function updateCurrentUser(updates) {
+    try {
+      const result = await api.updateUser(user.id, updates)
+      const updated = { ...user, name: result.name, email: result.email, avatar: result.avatar }
+      setUser(updated)
+      localStorage.setItem('farmiq_user', JSON.stringify(updated))
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.message }
+    }
+  }
+
   const canAccess = (minRole) => {
     const hierarchy = ['Viewer', 'Worker', 'Farm Manager', 'Farm Owner', 'Super Admin']
     const userLevel = hierarchy.indexOf(user?.role)
@@ -40,7 +52,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, canAccess }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, canAccess, updateCurrentUser }}>
       {children}
     </AuthContext.Provider>
   )

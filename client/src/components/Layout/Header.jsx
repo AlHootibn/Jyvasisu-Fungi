@@ -10,7 +10,7 @@ import { format } from 'date-fns'
 export default function Header({ title }) {
   const { user, logout } = useAuth()
   const { isDark, toggle } = useTheme()
-  const { unacknowledgedCount, criticalCount, alerts, lastUpdate } = useFarm()
+  const { unacknowledgedCount, criticalCount, alerts, lastUpdate, wsConnected } = useFarm()
   const [showAlerts, setShowAlerts] = useState(false)
   const [showUser, setShowUser] = useState(false)
   const navigate = useNavigate()
@@ -21,9 +21,13 @@ export default function Header({ title }) {
     <header className="h-14 bg-slate-900 border-b border-slate-800 flex items-center px-4 gap-3 shrink-0">
       <h1 className="text-base font-semibold text-slate-100 flex-1">{title}</h1>
 
-      <span className="text-xs text-slate-500 hidden sm:block">
-        Updated {format(lastUpdate, 'HH:mm:ss')}
-      </span>
+      <div className="hidden sm:flex items-center gap-2">
+        <span
+          title={wsConnected ? 'Live data connected' : 'Reconnecting...'}
+          className={`w-2 h-2 rounded-full shrink-0 transition-colors ${wsConnected ? 'bg-farm-500' : 'bg-amber-500 animate-pulse'}`}
+        />
+        <span className="text-xs text-slate-500">Updated {format(lastUpdate, 'HH:mm:ss')}</span>
+      </div>
 
       <button onClick={toggle} className="btn-ghost p-2">
         {isDark ? <Sun size={18} /> : <Moon size={18} />}

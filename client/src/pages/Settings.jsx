@@ -3,6 +3,7 @@ import Layout from '../components/Layout/Layout'
 import Toggle from '../components/UI/Toggle'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { useToast } from '../contexts/ToastContext'
 import { SENSOR_THRESHOLDS } from '../data/mockData'
 import { Settings as SettingsIcon, Bell, Sliders, Moon, Save } from 'lucide-react'
 
@@ -14,17 +15,40 @@ const NOTIF_SETTINGS = [
 ]
 
 export default function Settings() {
-  const { user } = useAuth()
+  const { user, updateCurrentUser } = useAuth()
   const { isDark, toggle } = useTheme()
+  const { showToast } = useToast()
   const [notifs, setNotifs] = useState({ email: true, sms: true, push: false, critical: false })
   const [thresholds, setThresholds] = useState(
     Object.fromEntries(Object.entries(SENSOR_THRESHOLDS).map(([k, v]) => [k, { min: v.optimal.min, max: v.optimal.max }]))
   )
-  const [saved, setSaved] = useState(false)
 
-  const handleSave = () => {
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+  const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '' })
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (password && password !== confirmPassword) {
+      showToast('Passwords do not match', 'warning')
+      return
+    }
+    if (password && password.length < 6) {
+      showToast('Password must be at least 6 characters', 'warning')
+      return
+    }
+    setSaving(true)
+    const updates = { name: form.name, email: form.email }
+    if (password) updates.password = password
+    const result = await updateCurrentUser(updates)
+    setSaving(false)
+    if (result.success) {
+      showToast('Profile saved successfully', 'success')
+      setPassword('')
+      setConfirmPassword('')
+    } else {
+      showToast(result.error || 'Failed to save settings')
+    }
   }
 
   return (
@@ -43,10 +67,22 @@ export default function Settings() {
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><label className="label">Full Name</label><input className="input" defaultValue={user?.name} /></div>
-            <div><label className="label">Email</label><input type="email" className="input" defaultValue={user?.email} /></div>
-            <div><label className="label">New Password</label><input type="password" className="input" placeholder="Leave blank to keep current" /></div>
-            <div><label className="label">Confirm Password</label><input type="password" className="input" placeholder="Confirm new password" /></div>
+            <div>
+              <label className="label">Full Name</label>
+              <input className="input" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">Email</label>
+              <input type="email" className="input" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">New Password</label>
+              <input type="password" className="input" placeholder="Leave blank to keep current" value={password} onChange={e => setPassword(e.target.value)} />
+            </div>
+            <div>
+              <label className="label">Confirm Password</label>
+              <input type="password" className="input" placeholder="Confirm new password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
+            </div>
           </div>
         </div>
 
@@ -110,9 +146,11 @@ export default function Settings() {
         </div>
 
         <div className="flex gap-3 justify-end">
-          <button onClick={handleSave} className="btn-primary flex items-center gap-2">
-            <Save size={16} />
-            {saved ? 'Saved!' : 'Save Settings'}
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
+            {saving
+              ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              : <Save size={16} />}
+            {saving ? 'Saving...' : 'Save Settings'}
           </button>
         </div>
       </div>

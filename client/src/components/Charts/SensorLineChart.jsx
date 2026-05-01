@@ -18,8 +18,11 @@ const CustomTooltip = ({ active, payload, label }) => {
   )
 }
 
-export default function SensorLineChart({ type, currentValue, height = 200 }) {
-  const data = useMemo(() => generateSensorHistory(currentValue, 24, SENSOR_THRESHOLDS[type]?.optimal ? 2 : 1), [currentValue])
+export default function SensorLineChart({ type, currentValue, height = 200, data: propData }) {
+  const data = useMemo(
+    () => propData ?? generateSensorHistory(currentValue, 24, SENSOR_THRESHOLDS[type]?.optimal ? 2 : 1),
+    [propData, currentValue]
+  )
   const t = SENSOR_THRESHOLDS[type]
   const color = COLORS[type] || '#22c55e'
 

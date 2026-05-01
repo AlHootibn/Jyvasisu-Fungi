@@ -76,7 +76,7 @@ export default function Users() {
   // ── Edit user ─────────────────────────────────────────────────────────────
   const startEdit = (u) => {
     setEditId(u.id)
-    setEditForm({ name: u.name, email: u.email, role: u.role })
+    setEditForm({ name: u.name, email: u.email, role: u.role, password: '' })
     setEditConfirm(false)
     setDeleteId(null)
     setShowAddForm(false)
@@ -85,7 +85,9 @@ export default function Users() {
   const cancelEdit = () => { setEditId(null); setEditConfirm(false) }
 
   const confirmEdit = () => {
-    updateUser(editId, editForm)
+    const updates = { name: editForm.name, email: editForm.email, role: editForm.role }
+    if (editForm.password) updates.password = editForm.password
+    updateUser(editId, updates)
     setEditId(null)
     setEditConfirm(false)
   }
@@ -315,6 +317,16 @@ export default function Users() {
                               <option key={r} value={r}>{r}</option>
                             ))}
                           </select>
+                        </div>
+                        <div>
+                          <label className="label">New Password</label>
+                          <input
+                            type="password"
+                            className="input"
+                            placeholder="Leave blank to keep current"
+                            value={editForm.password}
+                            onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
+                          />
                         </div>
                       </div>
 

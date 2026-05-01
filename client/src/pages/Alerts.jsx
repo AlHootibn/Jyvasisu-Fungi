@@ -23,11 +23,14 @@ export default function Alerts() {
   const { canAccess } = useAuth()
   const [filter, setFilter] = useState('all')
   const [severityFilter, setSeverityFilter] = useState('all')
+  const [visible, setVisible] = useState(20)
 
   let filtered = alerts
   if (filter === 'active') filtered = filtered.filter(a => !a.acknowledged)
   if (filter === 'acknowledged') filtered = filtered.filter(a => a.acknowledged)
   if (severityFilter !== 'all') filtered = filtered.filter(a => a.severity === severityFilter)
+
+  const displayed = filtered.slice(0, visible)
 
   return (
     <Layout title="Alerts & Notifications">
@@ -51,14 +54,14 @@ export default function Alerts() {
           <div className="flex gap-2 flex-wrap">
             <div className="flex gap-1">
               {['all', 'active', 'acknowledged'].map(f => (
-                <button key={f} onClick={() => setFilter(f)} className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors', filter === f ? 'bg-farm-700 text-farm-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}>
+                <button key={f} onClick={() => { setFilter(f); setVisible(20) }} className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors', filter === f ? 'bg-farm-700 text-farm-200' : 'bg-slate-800 text-slate-400 hover:bg-slate-700')}>
                   {f === 'all' ? 'All' : f === 'active' ? 'Active' : 'Acknowledged'}
                 </button>
               ))}
             </div>
             <div className="flex gap-1">
               {['all', 'critical', 'warning', 'info'].map(s => (
-                <button key={s} onClick={() => setSeverityFilter(s)} className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors', severityFilter === s ? 'bg-slate-600 text-slate-200' : 'bg-slate-800 text-slate-500 hover:bg-slate-700')}>
+                <button key={s} onClick={() => { setSeverityFilter(s); setVisible(20) }} className={clsx('px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors', severityFilter === s ? 'bg-slate-600 text-slate-200' : 'bg-slate-800 text-slate-500 hover:bg-slate-700')}>
                   {s}
                 </button>
               ))}
@@ -72,7 +75,7 @@ export default function Alerts() {
         </div>
 
         <div className="space-y-2">
-          {filtered.map(alert => {
+          {displayed.map(alert => {
             const Icon = SEVERITY_ICONS[alert.severity] || Info
             const s = SEVERITY_STYLES[alert.severity]
             return (
@@ -106,6 +109,14 @@ export default function Alerts() {
               <Bell size={40} className="mx-auto mb-3 opacity-50" />
               <p>No alerts match your filters</p>
             </div>
+          )}
+          {visible < filtered.length && (
+            <button
+              onClick={() => setVisible(v => v + 20)}
+              className="w-full py-2.5 text-sm text-slate-400 hover:text-slate-200 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 rounded-xl transition-colors"
+            >
+              Show more ({filtered.length - visible} remaining)
+            </button>
           )}
         </div>
       </div>

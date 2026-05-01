@@ -1,10 +1,15 @@
 import { useParams, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import Layout from '../components/Layout/Layout'
 import SensorCard from '../components/Dashboard/SensorCard'
 import DeviceCard from '../components/Dashboard/DeviceCard'
 import SensorLineChart from '../components/Charts/SensorLineChart'
 import { useFarm } from '../contexts/FarmContext'
+import { api } from '../services/api'
 import { ArrowLeft } from 'lucide-react'
+import { format } from 'date-fns'
+
+const DB_FIELD = { temp: 'temperature', humidity: 'humidity', co2: 'co2', light: 'light', moisture: 'moisture' }
 
 export default function RoomDetails() {
   const { id } = useParams()
@@ -13,6 +18,24 @@ export default function RoomDetails() {
   const room = rooms.find(r => r.id === Number(id))
   const s = sensors[Number(id)]
   const roomDevices = devices.filter(d => d.roomId === Number(id))
+  const [sensorHistory, setSensorHistory] = useState({})
+
+  useEffect(() => {
+    if (!id) return
+    api.getSensorHistory(Number(id), 24).then(readings => {
+      const toChart = (field) => readings.map(r => ({
+        time: format(new Date(r.created_at), 'HH:mm'),
+        value: r[DB_FIELD[field]] ?? r[field],
+      }))
+      setSensorHistory({
+        temp: toChart('temp'),
+        humidity: toChart('humidity'),
+        co2: toChart('co2'),
+        light: toChart('light'),
+        moisture: toChart('moisture'),
+      })
+    }).catch(() => {})
+  }, [id])
 
   if (!room || !s) return (
     <Layout title="Room Details">
@@ -32,8 +55,8 @@ export default function RoomDetails() {
         </div>
 
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-          {Object.entries(s).map(([type, value]) => (
-            <SensorCard key={type} type={type} value={value} />
+          {['temp', 'humidity', 'co2', 'light', 'moisture'].map(type => (
+            <SensorCard key={type} type={type} value={s[type]} />
           ))}
         </div>
 
@@ -41,7 +64,7 @@ export default function RoomDetails() {
           {[['temp', s.temp], ['humidity', s.humidity], ['co2', s.co2], ['moisture', s.moisture]].map(([type, val]) => (
             <div key={type} className="card">
               <h3 className="text-sm font-semibold text-slate-300 mb-2 capitalize">{type} — 24h Trend</h3>
-              <SensorLineChart type={type} currentValue={val} height={160} />
+              <SensorLineChart type={type} currentValue={val} height={160} data={sensorHistory[type]} />
             </div>
           ))}
         </div>

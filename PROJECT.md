@@ -10,8 +10,8 @@ Owner: Hisham AlHoot (`admin@farm.com`)
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18 + Vite + Tailwind CSS + Recharts |
-| Backend | Node.js + Express |
+| Frontend | React 19 + Vite 8 + Tailwind CSS 4 + Recharts |
+| Backend | Node.js + Express 5 |
 | Database | PostgreSQL 17 |
 | Real-time | WebSocket (`ws` library) |
 | Auth | JWT (jsonwebtoken) + bcryptjs |
@@ -27,38 +27,40 @@ Farm/
 ├── client/                        # React frontend
 │   ├── src/
 │   │   ├── contexts/
-│   │   │   ├── AuthContext.jsx    # JWT login, logout, canAccess()
-│   │   │   ├── FarmContext.jsx    # All app state, API calls, WebSocket
-│   │   │   └── ThemeContext.jsx   # Dark/light mode
+│   │   │   ├── AuthContext.jsx    # JWT login, logout, canAccess(), updateCurrentUser()
+│   │   │   ├── FarmContext.jsx    # All app state, API calls, WebSocket, wsConnected
+│   │   │   ├── ThemeContext.jsx   # Dark/light mode (toggles .dark on <html>)
+│   │   │   └── ToastContext.jsx   # Global toast notifications (error/success/warning/info)
 │   │   ├── pages/
 │   │   │   ├── Login.jsx          # Login form + quick demo buttons
 │   │   │   ├── Dashboard.jsx      # Overview: sensors, devices, alerts, harvest
 │   │   │   ├── FarmOverview.jsx   # Farm info + room cards + room CRUD
-│   │   │   ├── RoomDetails.jsx    # Single room sensors, devices, history
+│   │   │   ├── RoomDetails.jsx    # Single room sensors, devices, real 24h history
 │   │   │   ├── Devices.jsx        # All devices across all rooms
 │   │   │   ├── Automation.jsx     # Automation rules CRUD + toggle
-│   │   │   ├── Alerts.jsx         # Alert list, filters, acknowledge
+│   │   │   ├── Alerts.jsx         # Alert list, filters, acknowledge, pagination
 │   │   │   ├── Tasks.jsx          # Task management (assign, status, priority)
-│   │   │   ├── Production.jsx     # Harvest logs
+│   │   │   ├── Production.jsx     # Harvest logs + delete with inline confirm
 │   │   │   ├── Inventory.jsx      # Inventory table + edit/restock/delete
-│   │   │   ├── Reports.jsx        # Charts and analytics
-│   │   │   ├── Users.jsx          # User management + add/edit/delete
-│   │   │   └── Settings.jsx       # Farm settings
+│   │   │   ├── Reports.jsx        # Charts, analytics, CSV export, PDF export
+│   │   │   ├── Users.jsx          # User management + add/edit/delete + password change
+│   │   │   └── Settings.jsx       # Profile settings wired to API, password change
 │   │   ├── components/
 │   │   │   ├── Layout/
 │   │   │   │   ├── Layout.jsx     # App shell wrapper
 │   │   │   │   ├── Sidebar.jsx    # Navigation sidebar
-│   │   │   │   └── Header.jsx     # Top bar with alerts badge
+│   │   │   │   └── Header.jsx     # Top bar with alerts badge + WS connection indicator
 │   │   │   ├── Dashboard/
 │   │   │   │   ├── SensorCard.jsx # Sensor reading display card
 │   │   │   │   └── DeviceCard.jsx # Device toggle card
 │   │   │   ├── Charts/
-│   │   │   │   └── SensorLineChart.jsx # 24h sensor trend chart
+│   │   │   │   └── SensorLineChart.jsx # 24h sensor trend chart (real data or mock fallback)
+│   │   │   ├── ReportPDF.jsx      # @react-pdf/renderer — 2-page A4 PDF report
 │   │   │   └── UI/
 │   │   │       ├── Badge.jsx
 │   │   │       └── Toggle.jsx
 │   │   └── services/
-│   │       └── api.js             # All API calls + WebSocket connector
+│   │       └── api.js             # All API calls + WebSocket connector (onConnect/onDisconnect)
 │
 ├── server/                        # Node.js backend
 │   ├── index.js                   # Express app, WebSocket, route mounting
@@ -122,7 +124,7 @@ cd client && npm run dev
 ```
 
 ### URLs
-- Frontend: http://localhost:5173
+- Frontend: http://localhost:5132
 - Backend API: http://localhost:3001/api
 - WebSocket: ws://localhost:3001/ws
 - Health check: http://localhost:3001/api/health
@@ -180,7 +182,7 @@ The API returns snake_case from PostgreSQL. FarmContext normalizes to camelCase 
 | `action_device` + `action_state` | `action: { device, state }` |
 | `room_name` (JOIN) | `roomName` |
 | `created_at` | `timestamp` (alerts) / `date` (harvest) |
-| `temperature` | `temp` (sensor readings) |
+| `temperature` | `temperature` (sensor readings — no alias, matches DB column name) |
 
 ---
 
@@ -212,7 +214,7 @@ PUT             /api/devices/:id/control   — body: { status, mode }
 ### Sensors
 ```
 GET  /api/sensor-data/latest          — latest reading per room (keyed by room_id)
-GET  /api/sensor-data/:room_id?hours=24
+GET  /api/sensor-data/:room_id?hours=24  — returns 10-min time-bucket averages (~144 points/24h)
 POST /api/sensor-data                  — IoT device posts here (X-API-Key header)
 ```
 
@@ -253,8 +255,9 @@ Enforced in two places:
 - Runs every **3 seconds**
 - Reads latest value per room from DB
 - Applies small random drift (±0.2°C temp, ±0.6% humidity, ±15 ppm CO₂, etc.)
+- Values clamped to physical limits: temp 10–40°C, humidity 0–100%, CO₂ 300–5000 ppm, light 0–2000, moisture 0–100%
 - Inserts new row into `sensor_data`
-- Broadcasts `{ type: 'sensor_update', roomId, data: { temp, humidity, co2, light, moisture } }` via WebSocket
+- Broadcasts `{ type: 'sensor_update', roomId, data: { temperature, humidity, co2, light, moisture } }` via WebSocket
 
 ### Automation Engine (`server/services/automation.js`)
 - Runs every **10 seconds**
@@ -321,27 +324,35 @@ Keeps: farm, rooms, devices, users, automation rules.
 
 ### Frontend
 - [x] AuthContext connected to real API (was mock DEMO_USERS before)
+- [x] AuthContext `updateCurrentUser()` — updates name/email/password/avatar; persists to localStorage
 - [x] FarmContext connected to real API — all state loaded from PostgreSQL on mount
-- [x] WebSocket integration — sensor/device/alert updates arrive live
+- [x] FarmContext `deleteHarvestLog(id)` — calls `DELETE /api/harvest/:id`, removes from local state
+- [x] FarmContext `wsConnected` state — tracks live WebSocket connection status
+- [x] WebSocket integration — sensor/device/alert updates arrive live; `onConnect`/`onDisconnect` callbacks
+- [x] ToastContext — global notification system (error/success/warning/info); all 19 silent errors now show toasts
 - [x] snake_case → camelCase normalizers for all entities
 - [x] All mutations (toggle device, add task, etc.) call API then update local state
 - [x] Login page — async, handles API errors
-- [x] Dashboard — sensor cards, device control, alerts, today's harvest stat
+- [x] Dashboard — sensor cards, device control, alerts, today's harvest stat; real 24h sensor history for charts
 - [x] Farm Overview — farm header, room cards with live sensors, room add/edit/delete
-- [x] Room Details — per-room sensors, devices, 24h charts
+- [x] Room Details — per-room sensors, devices, real 24h history per room fetched from API
 - [x] Devices — all devices, filter by room, toggle on/off
 - [x] Automation — rule list, toggle active, add new rule, delete
-- [x] Alerts — filter by severity/status, acknowledge single or all
+- [x] Alerts — filter by severity/status, acknowledge single or all; client-side "Show more" pagination (20 per batch)
 - [x] Tasks — add task, assign to user, set priority/due date, mark complete, delete
-- [x] Production/Harvest — log harvest entries, view history
+- [x] Production/Harvest — log harvest entries, view history; hover-reveal delete with inline confirm
 - [x] Inventory — table with restock, inline edit, delete with confirmation
-- [x] Users — add user with role picker + permission preview, inline edit, delete
+- [x] Reports — charts/analytics with real sensor history; CSV export; PDF export (lazy-loaded `@react-pdf/renderer`)
+- [x] Users — add user with role picker + permission preview, inline edit/delete; password change in edit form
+- [x] Settings — profile section (name/email) wired to `PUT /api/users/:id`; password change with validation; save toast
 - [x] Role permission preview shown when selecting roles (add/edit user)
-- [x] Two-step confirmation pattern on all destructive actions (rooms, users, inventory)
+- [x] Two-step confirmation pattern on all destructive actions (rooms, users, inventory, harvest)
 - [x] Super Admin badge + protected status in Users page
 - [x] "You" badge on current user's row
 - [x] Loading spinner while data loads from API
 - [x] Hover-reveal action buttons (edit/delete don't clutter the UI)
+- [x] Header WebSocket indicator — green dot (live) / amber pulsing dot (reconnecting)
+- [x] Light/dark theme — full theme switch via CSS custom property overrides; `html:not(.dark)` inverts slate palette
 
 ---
 
@@ -352,7 +363,7 @@ Keeps: farm, rooms, devices, users, automation rules.
 | Login "Missing token" after AuthContext update | Old localStorage session had no JWT (was mock auth) | Log out and log back in — new session stores token |
 | Farm Overview crash on load | `farms[0]` was `undefined` during API loading | Loading spinner guard before rendering |
 | `batchStartDate` blank in room cards | `normalizeRoom` missed `batch_start_date → batchStartDate` | Added to normalizer |
-| 6th "sensor card" showing a date string | `Object.entries(sensors[id])` included `updatedAt` field | Switched to explicit `SENSOR_KEYS` array |
+| 6th sensor card showing a date string | `Object.entries(sensors[id])` included `updatedAt` field | Switched to explicit `SENSOR_KEYS` array |
 | `farm.activeAlerts` shows undefined | DB `farms` table has no `activeAlerts` column | Computed live from `alerts.filter(a => !a.acknowledged).length` |
 | Inventory `minQuantity` undefined | Normalizer had wrong field name (`low_stock_threshold` → actual is `min_quantity`) | Fixed to `minQuantity: i.min_quantity` |
 | Inventory `lastRestocked` crash | Normalizer had wrong field name (`last_updated` → actual is `last_restocked`) | Fixed to `lastRestocked: i.last_restocked` |
@@ -361,31 +372,24 @@ Keeps: farm, rooms, devices, users, automation rules.
 | Port 3001 EADDRINUSE | Multiple node processes from background runs | `Stop-Process -Id <pid> -Force` in PowerShell |
 | `u.lastLogin` crash in Users page | Field doesn't exist in DB — API returns `created_at` | Changed to show "Joined: {created_at}" |
 | Harvest seed/normalizer mismatch | Schema uses `date`, `weight`, `quality` — not `batch_name`, `weight_kg`, `quality_grade` | Fixed normalizer and seed script |
+| CORS rejected all API calls | `server/index.js` had hardcoded origin `http://localhost:5173`; frontend runs on 5132 | Changed to `http://localhost:5132` |
+| Humidity showing 107.8% | Sensor simulator had no value clamping — random drift could exceed physical limits | Added `clamp(v, min, max)` helper with per-sensor limits |
+| All sensor charts showed fake data | `SensorLineChart`, `Reports`, `Dashboard` all used `generateSensorHistory()` (random mock) | All pages now fetch real data from `GET /api/sensor-data/:room_id?hours=24` |
+| `temperature AS temp` alias broke frontend | `sensors.js` history query aliased `temperature` to `temp`; frontend reads `r.temperature` | Removed alias; sensor history now returns raw column names |
+| PDF export doubled bundle size | Static `import '@react-pdf/renderer'` added ~1.4MB to main bundle | Changed to dynamic `import()` inside button click handler; main bundle stays at ~771KB |
+| Settings Save did nothing | Button showed "Saved!" flash animation but never called any API | Wired to `updateCurrentUser()` in AuthContext; shows success/error toast |
+| All FarmContext API errors were silent | 19 `console.error` calls with no user feedback | All replaced with `showToast(err.message)` via new ToastContext |
+| Light theme toggle had no visual effect | ThemeContext toggles `.dark` class, but all components use hardcoded dark Tailwind classes with no `dark:` variants | Added `html:not(.dark)` CSS custom property overrides in `index.css` to invert slate palette |
 
 ---
 
 ## Still To Do / Future Work
 
-### High Priority
-- [ ] **Production/Harvest page** — check if the log form sends fields matching the route (`date`, `weight`, `quality`, `species`) — may need same fix as inventory
-- [ ] **Reports page** — verify it reads from real sensor history API (not mock data), charts should use `getSensorHistory(roomId, 24)`
-- [ ] **RoomDetails page** — check it fetches real sensor history for charts and uses correct room ID from URL params
-- [ ] **Settings page** — currently likely shows static content; could wire up farm update API (`PUT /api/farms/:id`)
-- [ ] **Devices page** — verify filter-by-room dropdown works, verify toggle calls `api.controlDevice()`
-
-### Medium Priority
-- [ ] **Password change** — add password field to the edit user form (already supported by `PUT /api/users/:id`)
-- [ ] **deleteHarvestLog** — `api.deleteHarvest(id)` exists but no delete button in Production page
-- [ ] **Pagination** — alerts and sensor history will grow large; add limit/offset or infinite scroll
+### Not Yet Implemented
+- [ ] **Devices page** — filter-by-room dropdown not yet implemented
 - [ ] **WebSocket authentication** — currently WS accepts any connection; should verify JWT on connect
-- [ ] **Error toasts** — API errors currently only log to console; add visible error notifications
-- [ ] **Offline indicator** — show when WebSocket is disconnected
-
-### Low Priority / Nice to Have
 - [ ] **ESP32 / real IoT hardware** — replace `sensorSimulator.js` with real hardware posting to `POST /api/sensor-data` using `X-API-Key` header
 - [ ] **Multi-farm support** — currently hardcoded `farm_id = 1` in FarmContext; generalise for multiple farms
-- [ ] **Dark/light theme** — ThemeContext exists but may not be fully wired to all components
-- [ ] **Export reports** — CSV/PDF export of harvest logs or sensor history
 - [ ] **Email/push notifications** — for critical alerts when browser is closed
 - [ ] **Batch tracking** — link harvest logs to specific batch names in rooms
 - [ ] **GitHub Actions CI** — automated tests on push
@@ -433,3 +437,30 @@ curl -X POST http://localhost:3001/api/auth/login \
   -H "Content-Type: application/json" \
   -d "{\"email\":\"admin@farm.com\",\"password\":\"admin123\"}"
 ```
+
+---
+
+## Changelog
+
+### Initial Build
+- Full PostgreSQL backend — REST API, automation engine, WebSocket, DB schema
+- React 19 frontend connected to real auth, live sensors, full CRUD
+
+### Tech Stack Upgrade (May 2026)
+- **Frontend**: Upgraded to React 19, Vite 8, React Router 7, Recharts 3
+- **Styling**: Migrated to Tailwind CSS v4 — `@tailwindcss/vite` plugin, `@theme` block in CSS, no `postcss.config.js` or `tailwind.config.js`
+- **Backend**: Upgraded to Express 5, pg 8.20.0
+- **Port**: Frontend dev server moved to `5132`; Vite proxy uses `127.0.0.1`; CORS origin fixed to match
+
+### Feature Sprint (May 2026)
+- **Toast notifications** — `ToastContext` added globally; all silent API errors now surface as toasts
+- **Real sensor charts** — `Dashboard`, `RoomDetails`, and `Reports` all fetch real 24h history from PostgreSQL instead of using mock random data
+- **Sensor history downsampling** — `GET /api/sensor-data/:room_id` aggregates into 10-minute time buckets (PostgreSQL `FLOOR(EPOCH/600)`), reducing ~28,800 raw readings to ~144 data points per 24h window
+- **Sensor simulator clamping** — added `clamp()` helper; values now stay within physical limits (e.g. humidity 0–100%)
+- **WebSocket offline indicator** — green/amber pulsing dot in Header, driven by `wsConnected` state in FarmContext
+- **Alerts pagination** — "Show more" loads 20 at a time; filter changes reset to first page
+- **Delete harvest logs** — hover-reveal trash icon with inline confirm/cancel on Production page
+- **Password change** — available in both the Users edit form and the Settings profile section
+- **Settings Save wired** — profile name/email/password changes call `PUT /api/users/:id` and update JWT localStorage; shows success/error toast
+- **PDF export** — `@react-pdf/renderer` generates a professional 2-page A4 PDF (KPI cards, 7-day bar chart, room/species breakdown, sensor snapshot, full harvest log table); lazy-loaded on demand so main bundle stays at ~771KB
+- **Light theme** — `html:not(.dark)` CSS custom property overrides in `index.css` invert the Tailwind slate palette; the entire UI switches to a white/light-gray theme without any component changes

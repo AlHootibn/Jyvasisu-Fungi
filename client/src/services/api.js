@@ -1,7 +1,7 @@
 // API Service — connects the frontend to the real backend
 // Set VITE_API_URL in client/.env to override the default
 
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+const BASE = import.meta.env.VITE_API_URL || ''
 
 function getToken() {
   try {
@@ -101,16 +101,17 @@ export const api = {
 }
 
 // WebSocket helper
-export function connectWebSocket(onMessage) {
-  const WS_URL = BASE.replace(/^http/, 'ws') + '/ws'
+export function connectWebSocket(onMessage, onConnect, onDisconnect) {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const WS_URL = BASE ? BASE.replace(/^http/, 'ws') + '/ws' : `${protocol}//${window.location.host}/ws`;
   let ws
   let reconnectTimer
 
   function connect() {
     ws = new WebSocket(WS_URL)
-    ws.onopen    = () => console.log('WS connected')
+    ws.onopen    = () => { console.log('WS connected'); onConnect?.() }
     ws.onmessage = (e) => { try { onMessage(JSON.parse(e.data)) } catch {} }
-    ws.onclose   = () => { reconnectTimer = setTimeout(connect, 3000) }
+    ws.onclose   = () => { onDisconnect?.(); reconnectTimer = setTimeout(connect, 3000) }
     ws.onerror   = () => ws.close()
   }
 

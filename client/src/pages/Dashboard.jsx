@@ -4,15 +4,28 @@ import DeviceCard from '../components/Dashboard/DeviceCard'
 import SensorLineChart from '../components/Charts/SensorLineChart'
 import { useFarm } from '../contexts/FarmContext'
 import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { AlertTriangle, CheckCircle, Activity, Layers, TrendingUp, Clock } from 'lucide-react'
 import clsx from 'clsx'
 import { format } from 'date-fns'
+import { api } from '../services/api'
 
 const STATUS_COLORS = { optimal: 'bg-farm-500', warning: 'bg-amber-500', critical: 'bg-red-500' }
 
 export default function Dashboard() {
   const { rooms, sensors, devices, alerts, tasks, toggleDevice, harvestLogs } = useFarm()
   const navigate = useNavigate()
+  const [room1History, setRoom1History] = useState({})
+
+  useEffect(() => {
+    api.getSensorHistory(1, 24).then(readings => {
+      const toChart = (field) => readings.map(r => ({
+        time: format(new Date(r.created_at), 'HH:mm'),
+        value: field === 'temp' ? r.temperature : r[field],
+      }))
+      setRoom1History({ temp: toChart('temp'), humidity: toChart('humidity') })
+    }).catch(() => {})
+  }, [])
 
   const activeAlerts = alerts.filter(a => !a.acknowledged)
   const pendingTasks = tasks.filter(t => t.status === 'pending').length
@@ -100,11 +113,11 @@ export default function Dashboard() {
           <div className="xl:col-span-3 space-y-4">
             <div className="card">
               <h2 className="text-sm font-semibold text-slate-300 mb-1">Room A1 — Temperature (24h)</h2>
-              <SensorLineChart type="temp" currentValue={mainRoom?.temp ?? 21} height={180} />
+              <SensorLineChart type="temp" currentValue={mainRoom?.temp ?? 21} height={180} data={room1History.temp} />
             </div>
             <div className="card">
               <h2 className="text-sm font-semibold text-slate-300 mb-1">Room A1 — Humidity (24h)</h2>
-              <SensorLineChart type="humidity" currentValue={mainRoom?.humidity ?? 89} height={180} />
+              <SensorLineChart type="humidity" currentValue={mainRoom?.humidity ?? 89} height={180} data={room1History.humidity} />
             </div>
           </div>
 

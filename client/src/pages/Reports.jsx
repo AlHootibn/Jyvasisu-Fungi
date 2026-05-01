@@ -4,10 +4,11 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell
 } from 'recharts'
-import { generateSensorHistory } from '../data/mockData'
 import { format, subDays } from 'date-fns'
-import { Download, TrendingUp } from 'lucide-react'
-import { useMemo } from 'react'
+import { Download, TrendingUp, FileText } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { api } from '../services/api'
+import React from 'react'
 
 const COLORS = ['#22c55e', '#3b82f6', '#a855f7']
 
@@ -22,7 +23,19 @@ const CustomTooltip = ({ active, payload, label }) => {
 }
 
 export default function Reports() {
-  const { harvestLogs, sensors } = useFarm()
+  const { harvestLogs, sensors, farms } = useFarm()
+  const [multiSensor, setMultiSensor] = useState([])
+  const [pdfLoading, setPdfLoading] = useState(false)
+
+  useEffect(() => {
+    api.getSensorHistory(1, 24).then(readings => {
+      setMultiSensor(readings.map(r => ({
+        time: format(new Date(r.created_at), 'HH:mm'),
+        Temp: parseFloat(r.temperature),
+        Humidity: parseFloat(r.humidity),
+      })))
+    }).catch(() => {})
+  }, [])
 
   const last7Days = Array.from({ length: 7 }, (_, i) => {
     const date = format(subDays(new Date(), 6 - i), 'yyyy-MM-dd')
@@ -36,10 +49,6 @@ export default function Reports() {
     }
   })
 
-  const tempData = useMemo(() => generateSensorHistory(sensors[1].temp, 24, 2), [])
-  const humData = useMemo(() => generateSensorHistory(sensors[1].humidity, 24, 3), [])
-  const co2Data = useMemo(() => generateSensorHistory(sensors[1].co2, 24, 60), [])
-
   const totalHarvest = harvestLogs.reduce((s, h) => s + h.weight, 0)
   const avgDaily = (totalHarvest / 30).toFixed(1)
   const byRoom = [
@@ -48,17 +57,31 @@ export default function Reports() {
     { name: 'Room C3', value: harvestLogs.filter(h => h.roomId === 3).reduce((s, h) => s + h.weight, 0).toFixed(1) },
   ]
 
-  const multiSensor = tempData.map((d, i) => ({
-    time: d.time,
-    Temp: d.value,
-    Humidity: humData[i]?.value,
-  }))
-
   const handleExport = () => {
     const rows = harvestLogs.map(h => `${h.date},${h.roomName},${h.weight},${h.quality},${h.species}`)
     const csv = ['Date,Room,Weight(kg),Quality,Species', ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'harvest_report.csv'; a.click()
+  }
+
+  const handlePdfExport = async () => {
+    setPdfLoading(true)
+    try {
+      const [{ pdf }, { default: ReportPDF }] = await Promise.all([
+        import('@react-pdf/renderer'),
+        import('../components/ReportPDF'),
+      ])
+      const blob = await pdf(
+        React.createElement(ReportPDF, { harvestLogs, sensors, farms })
+      ).toBlob()
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `jyvasisu-fungi-report-${format(new Date(), 'yyyy-MM-dd')}.pdf`
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } finally {
+      setPdfLoading(false)
+    }
   }
 
   return (
@@ -75,9 +98,21 @@ export default function Reports() {
               <p className="text-[11px] text-slate-500">Avg per day</p>
             </div>
           </div>
-          <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm">
-            <Download size={15} /> Export CSV
-          </button>
+          <div className="flex gap-2">
+            <button onClick={handleExport} className="btn-secondary flex items-center gap-2 text-sm">
+              <Download size={15} /> CSV
+            </button>
+            <button
+              onClick={handlePdfExport}
+              disabled={pdfLoading}
+              className="btn-primary flex items-center gap-2 text-sm"
+            >
+              {pdfLoading
+                ? <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                : <FileText size={15} />}
+              {pdfLoading ? 'Generating…' : 'Export PDF'}
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">

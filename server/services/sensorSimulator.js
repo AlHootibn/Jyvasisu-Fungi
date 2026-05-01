@@ -14,12 +14,13 @@ async function tick(broadcast) {
       )
       const b = latest[0] || { temperature: 21, humidity: 88, co2: 850, light: 400, moisture: 70 }
 
+      const clamp = (v, min, max) => Math.min(max, Math.max(min, v))
       const reading = {
-        temperature: parseFloat((b.temperature + (Math.random() - 0.5) * 0.4).toFixed(1)),
-        humidity:    parseFloat((b.humidity    + (Math.random() - 0.5) * 1.2).toFixed(1)),
-        co2:         Math.round(b.co2          + (Math.random() - 0.5) * 30),
-        light:       Math.round(b.light        + (Math.random() - 0.5) * 20),
-        moisture:    parseFloat((b.moisture    + (Math.random() - 0.5) * 0.5).toFixed(1)),
+        temperature: parseFloat(clamp(b.temperature + (Math.random() - 0.5) * 0.4, 10, 40).toFixed(1)),
+        humidity:    parseFloat(clamp(b.humidity    + (Math.random() - 0.5) * 1.2, 0, 100).toFixed(1)),
+        co2:         Math.round(clamp(b.co2         + (Math.random() - 0.5) * 30,  300, 5000)),
+        light:       Math.round(clamp(b.light       + (Math.random() - 0.5) * 20,  0, 2000)),
+        moisture:    parseFloat(clamp(b.moisture    + (Math.random() - 0.5) * 0.5, 0, 100).toFixed(1)),
       }
 
       await db.query(
