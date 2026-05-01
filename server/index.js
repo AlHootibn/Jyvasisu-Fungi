@@ -66,11 +66,20 @@ app.use((err, req, res, next) => {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3001
-server.listen(PORT, () => {
-  console.log(`\n🍄 JyväSisu Fungi Backend`)
-  console.log(`   API  → http://localhost:${PORT}/api`)
-  console.log(`   WS   → ws://localhost:${PORT}/ws`)
-  console.log(`   Health → http://localhost:${PORT}/api/health\n`)
-  startAutomationEngine(broadcast)
-  startSensorSimulator(broadcast)
-})
+const setup = require('./db/setup')
+
+setup()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`\n🍄 JyväSisu Fungi Backend`)
+      console.log(`   API  → http://localhost:${PORT}/api`)
+      console.log(`   WS   → ws://localhost:${PORT}/ws`)
+      console.log(`   Health → http://localhost:${PORT}/api/health\n`)
+      startAutomationEngine(broadcast)
+      startSensorSimulator(broadcast)
+    })
+  })
+  .catch(err => {
+    console.error('❌ Setup failed:', err.message)
+    process.exit(1)
+  })
